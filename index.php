@@ -15,7 +15,6 @@ class cd2_content_sectionOEmbedClass {
 
     public function __construct() {
         add_action( 'init', [ $this, 'init' ], 80 );
-        add_action( 'wp_loaded', [ $this, 'register_embed_handler'], 9999 );
     }
 
     public function init() {
@@ -24,10 +23,21 @@ class cd2_content_sectionOEmbedClass {
             '#('.admin_url( 'admin-ajax.php' ).'\?action=get_content_section&name=([a-zA-Z0-9-_]+).+)$#i'
         );
         
+        
+        add_action( 'wp_ajax_nopriv_get_content_section',
+            [ $this, 'ajax_content_section' ]
+        );
+        
         load_plugin_textdomain(
 	        'cd2_content_section_oembed',
 	        false,
 	        dirname( plugin_basename( __FILE__ ) ).'/languages'
+        );
+        
+        wp_embed_register_handler(
+            'cd2-content-section-internal',
+            CD2_CONTENT_SHORTCODE_OEMBED_PATTERN,
+            [ $this, 'handle_embed' ]
         );
         
         add_filter(
@@ -38,21 +48,28 @@ class cd2_content_sectionOEmbedClass {
         add_action( 'save_post', [ $this, 'save_post_callback' ] );
     }
     
-    public function register_embed_handler() {
-        wp_embed_register_handler(
-            'cd2-content-section-internal',
-            CD2_CONTENT_SHORTCODE_OEMBED_PATTERN,
-            [ $this, 'handle_embed' ]
+    public function ajax_content_section() {
+        $name = isset( $_GET['name'] ) ? urldecode( $_GET['name'] ) : 'invalid';
+        die(
+            do_shortcode(
+                '[content_section name="' . esc_attr( $name ) . '"]'
+            )
         );
     }
     
     public function handle_embed( $m, $attr, $url, $rattr ) {
         $urlHash = $this->getHash($url);
         $content = get_transient( "cd2_content_section_{$urlHash}" );
-        if ( false === ( $content ) ) {
-            return $this->embedWrap($url, $urlHash, "<!-- Try re-saving the content section or using it's title ;) {$url} -->");
+        if ( false === ( $content ) || empty(trim($content)) ) {
+            $request = wp_remote_get($url);
+            $response = wp_remote_retrieve_body( $request );
+            $content = trim($response);
+            set_transient( "cd2_content_section_{$urlHash}", $content, 0 );
         }
-        return $this->embedWrap($url, $urlHash, $content);
+        if(strlen("{$content}") > 5) {
+            return $this->embedWrap($url, $urlHash, $content);
+        }
+        return $this->embedWrap($url, $urlHash, "<!-- Try re-saving the content section or using it's title ;) {$url} -->");
     }
     
     protected function embedWrap($url, $urlHash, $html) {
