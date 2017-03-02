@@ -9,6 +9,10 @@ Author URI: http://www.codesign2.co.uk/
 License: AGPL
 */
 
+register_activation_hook( __FILE__, function() {
+    global $wpdb;
+    $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_cd2_content_section%'");
+});
 
 new cd2_content_sectionOEmbedClass();
 class cd2_content_sectionOEmbedClass {
